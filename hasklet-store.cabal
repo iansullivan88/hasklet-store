@@ -18,6 +18,7 @@ library
   ghc-options:         -Wall -W
   exposed-modules:     Hasklet.Store.Web
                      , Hasklet.Store.Database
+                     , Hasklet.Store.Transform
                      , Hasklet.Store.Types
   build-depends:       base >= 4.7 && < 5
                      , servant

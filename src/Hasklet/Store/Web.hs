@@ -8,13 +8,15 @@
 
 module Hasklet.Store.Web(startServer) where
 
+import           Hasklet.Store.Transform
 import           Hasklet.Store.Types
 
+import           Control.Exception          hiding (Handler)
 import           Control.Monad.Error.Class
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans
+import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Reader
-import           Data.HashMap.Lazy          as M
 import qualified Data.Text                  as T
 import           Data.Time.Clock
 import           Data.UUID
@@ -50,28 +52,34 @@ handlerTransform :: DatabaseActions conn -> StoreHandler conn :~> Handler
 handlerTransform da = NT $ runStoreHandler da
 
 runStoreHandler :: DatabaseActions conn -> StoreHandler conn a -> Handler a
-runStoreHandler da s = do h <- liftIO $ withTransaction da (\conn ->
-                                    let ctx = HandlerContext conn da
-                                    in  pure $ runReaderT s ctx)
-                          Handler h
+runStoreHandler da s = Handler $ ExceptT (transactionalHandler `catch` (pure . Left)) where
+    transactionalHandler = withTransaction da $ \conn -> do
+        let ctx = HandlerContext conn da
+            inner = runReaderT s ctx
+        res <- runExceptT inner
+        case res of
+            Left e  -> throwIO e -- throw error here to abort transaction
+            Right r -> pure (Right r)
 
 postContentHandler :: NewContent -> StoreHandler conn Content
 postContentHandler (NewContent cType fs) = do
     cId <- liftIO nextRandom
     time <- liftIO getCurrentTime
     query insertContent (cId, cType, time)
-    query insertFields (cId, time, M.toList fs)
+    case fromJSON fs of
+        Left err  -> throwStoreError $ err400 { errBody = err }
+        Right kvp -> query insertFields (cId, time, kvp)
     getContentHandler cId
 
 getAllContentHandler :: Maybe Int -> Maybe UUID -> Maybe T.Text -> Maybe UTCTime -> StoreHandler conn [Content]
-getAllContentHandler limit continue cType time = query queryContent params where
+getAllContentHandler limit continue cType time = query getContent params where
     params = contentQuery{ whereLimit=limit,
                            whereContinueId=continue,
                            whereType=cType,
                            whereTime=time }
 
 getContentHandler :: UUID -> StoreHandler conn Content
-getContentHandler cId = do content <- query queryContent contentQuery{ whereId = Just cId }
+getContentHandler cId = do content <- query getContent contentQuery{ whereId = Just cId }
                            case content of
                                []  -> throwStoreError err404
                                [c] -> pure c
