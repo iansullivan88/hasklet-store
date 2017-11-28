@@ -16,21 +16,7 @@ import           Servant.Server
 data FieldValue = NullField
                 | NumberField Double
                 | TextField T.Text
-                | BoolField Bool
-
-
-{-instance ToJSON FieldValue where
-    toJSON (NumberField d) = Number $ fromFloatDigits d
-    toJSON (TextField t)   = String t
-    toJSON (BoolField b)   = Bool b
-    toJSON NullField       = Null
-
-instance FromJSON FieldValue where
-    parseJSON (Number d) = return $ DoubleField $ toRealFloat d
-    parseJSON (String t) = return $ TextField t
-    parseJSON Null       = return NullField
-    parseJSON invalid    = typeMismatch "FieldValue" invalid
--}
+                | BoolField Bool deriving(Eq)
 
 data Content = Content {
     id               :: UUID,
@@ -70,6 +56,7 @@ contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing True
 data DatabaseActions conn = DatabaseActions {
     withTransaction :: forall a. (conn -> IO a) -> IO a,
     insertContent   :: conn -> (UUID, T.Text, UTCTime) -> IO (),
+    updateContent   :: conn -> (UUID, T.Text, UTCTime) -> IO (),
     insertFields    :: conn -> (UUID, UTCTime, [(T.Text, FieldValue)]) -> IO (),
     getContent      :: conn -> ContentQuery -> IO [Content]
 }

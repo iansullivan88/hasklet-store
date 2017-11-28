@@ -72,6 +72,7 @@ createDatabaseActions f = do
     pool <- createPool (open f) close 1 10 10
     pure $ DatabaseActions (withPooledTransaction pool)
         insertContent'
+        updateContent'
         insertFields'
         getContent'
 
@@ -100,6 +101,10 @@ createSchema conn = do
 insertContent' :: Connection -> (UUID, T.Text, UTCTime) -> IO ()
 insertContent' c (_id, _type, time) = executeNamed c sql [":id" := PersistUUID _id, ":type" := _type, ":time" := time]
     where sql = "INSERT INTO content VALUES (:id, :type, 1, :time, :time)"
+
+updateContent' :: Connection -> (UUID, T.Text, UTCTime) -> IO ()
+updateContent' c (_id, _type, time) = executeNamed c sql [":id" := PersistUUID _id, ":type" := _type, ":time" := time]
+    where sql = "UPDATE content SET type = :type, last_modified = :time WHERE id = :id"
 
 insertFields' :: Connection -> (UUID, UTCTime, [(T.Text, FieldValue)]) -> IO ()
 insertFields' c (cId, time, kvps) = executeMany c sql parameters

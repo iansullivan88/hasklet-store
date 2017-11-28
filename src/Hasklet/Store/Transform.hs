@@ -6,7 +6,7 @@ module Hasklet.Store.Transform where
 import           Hasklet.Store.Types
 
 import           Control.Arrow
-import           Data.Aeson
+import           Data.Aeson           hiding (fromJSON)
 import qualified Data.ByteString.Lazy as B
 import           Data.Function
 import qualified Data.HashMap.Lazy    as Map
@@ -40,6 +40,15 @@ fromKeyValuePairs = go . mapFst (\k -> if T.null k then [] else T.splitOn "." k)
     fromFieldValue (TextField t)   = String t
     fromFieldValue (BoolField b)   = Bool b
 
+fieldChanges :: Value -> Value -> Either B.ByteString [(T.Text, FieldValue)]
+fieldChanges v v' = do
+    fs  <- fromJSON v
+    fs' <- fromJSON v'
+    let fsMap = Map.fromList fs
+        fsMap' = Map.fromList fs'
+        updates = Map.differenceWith (\a b -> if a == b then Nothing else Just a) fsMap' fsMap
+        ommitedKeys = Map.keys $ Map.difference fsMap fsMap'
+    pure $ Map.toList updates ++ map (\k -> (k, NullField)) ommitedKeys
 
 groupByKey :: Ord b => (a -> b) -> [a] -> [(b, [a])]
 groupByKey get = map (\g -> (get $ head g, g)) . groupBy ((==) `on` get) . sortBy (compare `on` get)
