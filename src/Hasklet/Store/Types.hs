@@ -21,7 +21,6 @@ data FieldValue = NullField
 data Content = Content {
     id               :: UUID,
     contentType      :: T.Text,
-    active           :: Bool,
     lastModifiedTime :: UTCTime,
     createdTime      :: UTCTime,
     fields           :: Value
@@ -46,12 +45,11 @@ data ContentQuery = ContentQuery {
     whereType       :: Maybe T.Text,
     whereContinueId :: Maybe UUID,
     whereTime       :: Maybe UTCTime,
-    whereLimit      :: Maybe Int,
-    whereActive     :: Bool
+    whereLimit      :: Maybe Int
 }
 
 contentQuery :: ContentQuery
-contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing True
+contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing
 
 data DatabaseActions conn = DatabaseActions {
     withTransaction :: forall a. (conn -> IO a) -> IO a,

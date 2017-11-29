@@ -59,13 +59,13 @@ instance FromField ValueTransform where
         (SQLInteger 1) -> pure BoolTransform
         _              -> returnError ConversionFailed f "Unknown transform"
 
-data QueryRow = QueryRow PersistUUID T.Text Bool UTCTime UTCTime T.Text ValueTransform PersistFieldValue
+data QueryRow = QueryRow PersistUUID T.Text UTCTime UTCTime T.Text ValueTransform PersistFieldValue
 
 instance FromRow QueryRow where
-    fromRow = QueryRow <$> field <*> field <*> field <*> field <*> field <*> field <*> field <*> field
+    fromRow = QueryRow <$> field <*> field <*> field <*> field <*> field <*> field <*> field
 
 queryRowId :: QueryRow -> PersistUUID
-queryRowId (QueryRow _id _ _ _ _ _ _ _) = _id
+queryRowId (QueryRow _id _ _ _ _ _ _) = _id
 
 createDatabaseActions :: String -> IO (DatabaseActions Connection)
 createDatabaseActions f = do
@@ -84,7 +84,6 @@ createSchema :: Connection -> IO ()
 createSchema conn = do
     execute_ conn "CREATE TABLE IF NOT EXISTS content (id TEXT PRIMARY KEY,\
                                                      \ type TEXT NOT NULL,\
-                                                     \ active INTEGER NOT NULL,\
                                                      \ last_modified_time TEXT NOT NULL,\
                                                      \ created_time TEXT NOT NULL) WITHOUT ROWID"
 
@@ -100,7 +99,7 @@ createSchema conn = do
 
 insertContent' :: Connection -> (UUID, T.Text, UTCTime) -> IO ()
 insertContent' c (_id, _type, time) = executeNamed c sql [":id" := PersistUUID _id, ":type" := _type, ":time" := time]
-    where sql = "INSERT INTO content VALUES (:id, :type, 1, :time, :time)"
+    where sql = "INSERT INTO content VALUES (:id, :type, :time, :time)"
 
 updateContent' :: Connection -> (UUID, T.Text, UTCTime) -> IO ()
 updateContent' c (_id, _type, time) = executeNamed c sql [":id" := PersistUUID _id, ":type" := _type, ":time" := time]
@@ -113,21 +112,19 @@ insertFields' c (cId, time, kvps) = executeMany c sql parameters
           parameters = map (\(k, v) -> (cId', time, k, getTransform v, PersistFieldValue v)) kvps
 
 getContent' :: Connection -> ContentQuery -> IO [Content]
-getContent' c (ContentQuery _id _type cont time limit act) = groupRows <$> queryNamed c sql parameters  where
+getContent' c (ContentQuery _id _type cont time limit) = groupRows <$> queryNamed c sql parameters  where
     parameters = [":contentId" := PersistUUID <$> _id,
                   ":type" := _type,
                   ":continue" := PersistUUID <$> cont,
                   ":maxDate" := time,
-                  ":limit" := fromMaybe (-1) limit,
-                  ":active" := if act then SQLInteger 1 else SQLInteger 0]
+                  ":limit" := fromMaybe (-1) limit]
     sql = "\
-\SELECT id,type,active,last_modified_time,created_time,field.key,field.transform,field.value FROM (\
+\SELECT id,type,last_modified_time,created_time,field.key,field.transform,field.value FROM (\
 \    SELECT * FROM content\
 \    WHERE (:contentId IS NULL OR id = :contentId)\
 \    AND   (:type IS NULL OR type = :type)\
 \    AND   (:continue IS NULL or id > :continue)\
 \    AND   (:maxDate IS NULL OR created_time <= :maxDate)\
-\    AND   (active = :active)\
 \    ORDER BY id\
 \    LIMIT :limit\
 \) as content \
@@ -143,10 +140,10 @@ getContent' c (ContentQuery _id _type cont time limit act) = groupRows <$> query
 
 groupRows :: [QueryRow] -> [Content]
 groupRows = map mapGroup . groupBy ((==) `on` queryRowId) where
-    mapGroup rs = let (QueryRow (PersistUUID _id) cType a modified created _ _ _) = head rs
-                  in  Content _id cType a modified created (getFields rs)
+    mapGroup rs = let (QueryRow (PersistUUID _id) cType modified created _ _ _) = head rs
+                  in  Content _id cType modified created (getFields rs)
     getFields = fromMaybe Data.Aeson.Null . fromKeyValuePairs . map getField
-    getField (QueryRow _ _ _ _ _ k t (PersistFieldValue v)) = (k, transformFieldValue t v)
+    getField (QueryRow _ _ _ _ k t (PersistFieldValue v)) = (k, transformFieldValue t v)
 
 getTransform :: FieldValue -> ValueTransform
 getTransform (BoolField _) = BoolTransform
