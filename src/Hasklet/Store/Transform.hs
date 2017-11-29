@@ -29,12 +29,15 @@ fromJSON = go [] where
     getKey = T.intercalate "."
 
 fromKeyValuePairs :: [(T.Text, FieldValue)] -> Maybe Value
-fromKeyValuePairs = go . mapFst (\k -> if T.null k then [] else T.splitOn "." k) where
+fromKeyValuePairs fs = let fsWithValue = filter (\(_,v) -> v /= NoField) fs
+                           fsSplit = mapFst (\k -> if T.null k then [] else T.splitOn "." k) fsWithValue
+                       in  go fsSplit where
     go [([], v)] = Just $ fromFieldValue v
     go kvps
         | any (null . fst) kvps = Nothing -- This key has a value and sub-keys - this is not valid JSON
         | otherwise = (Object . Map.fromList) <$> traverse fromGroup (groupByKey (head . fst) kvps)
     fromGroup (k, kvps) = (k,) <$> go (mapFst tail kvps)
+    fromFieldValue NoField = error "This cannot happen. The NoField values are filtered out."
     fromFieldValue NullField       = Null
     fromFieldValue (NumberField d) = Number $ fromFloatDigits d
     fromFieldValue (TextField t)   = String t
@@ -48,7 +51,7 @@ fieldChanges v v' = do
         fsMap' = Map.fromList fs'
         updates = Map.differenceWith (\a b -> if a == b then Nothing else Just a) fsMap' fsMap
         ommitedKeys = Map.keys $ Map.difference fsMap fsMap'
-    pure $ Map.toList updates ++ map (\k -> (k, NullField)) ommitedKeys
+    pure $ Map.toList updates ++ map (\k -> (k, NoField)) ommitedKeys
 
 groupByKey :: Ord b => (a -> b) -> [a] -> [(b, [a])]
 groupByKey get = map (\g -> (get $ head g, g)) . groupBy ((==) `on` get) . sortBy (compare `on` get)

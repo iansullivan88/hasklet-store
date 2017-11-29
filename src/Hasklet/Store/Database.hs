@@ -33,6 +33,7 @@ instance FromField PersistUUID where
 newtype PersistFieldValue = PersistFieldValue FieldValue
 
 instance ToField PersistFieldValue where
+    toField (PersistFieldValue NoField)           = toField Null
     toField (PersistFieldValue NullField)         = toField Null
     toField (PersistFieldValue (BoolField True))  = SQLInteger 1
     toField (PersistFieldValue (BoolField False)) = SQLInteger 0
@@ -47,16 +48,18 @@ instance FromField PersistFieldValue where
         (SQLBlob _) -> returnError ConversionFailed f "Field values cannot be blobs"
         SQLNull -> pure $ PersistFieldValue NullField
 
-data ValueTransform = IdentityTransform | BoolTransform
+data ValueTransform = IdentityTransform | BoolTransform | NoFieldTransform
 
 instance ToField ValueTransform where
     toField IdentityTransform = SQLNull
     toField BoolTransform     = SQLInteger 1
+    toField NoFieldTransform  = SQLInteger 2
 
 instance FromField ValueTransform where
     fromField f = case fieldData f of
         SQLNull        -> pure IdentityTransform
         (SQLInteger 1) -> pure BoolTransform
+        (SQLInteger 2) -> pure NoFieldTransform
         _              -> returnError ConversionFailed f "Unknown transform"
 
 data QueryRow = QueryRow PersistUUID T.Text UTCTime UTCTime T.Text ValueTransform PersistFieldValue
@@ -147,9 +150,10 @@ groupRows = map mapGroup . groupBy ((==) `on` queryRowId) where
 
 getTransform :: FieldValue -> ValueTransform
 getTransform (BoolField _) = BoolTransform
+getTransform NoField       = NoFieldTransform
 getTransform _             = IdentityTransform
 
 transformFieldValue :: ValueTransform -> FieldValue -> FieldValue
 transformFieldValue IdentityTransform v           = v
 transformFieldValue BoolTransform (NumberField d) = BoolField (d /= 0)
-transformFieldValue _ _                           = NullField
+transformFieldValue _ _                           = NoField

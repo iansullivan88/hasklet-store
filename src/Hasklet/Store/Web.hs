@@ -34,17 +34,13 @@ type ContentAPI = "content" :> ReqBody '[JSON] NewContent
                             :> ReqBody '[JSON] NewContent
                             :> Put '[JSON] Content
              :<|> "content" :> Capture "contentId" UUID
+                            :> QueryParam "time" UTCTime
                             :> Get '[JSON] Content
              :<|> "content" :> QueryParam "limit" Int
                             :> QueryParam "continue" UUID
                             :> QueryParam "type" T.Text
                             :> QueryParam "time" UTCTime
                             :> Get '[JSON] [Content]
- {-            :<|> "content" :> Capture "contentId" UUID :> ReqBody '[JSON] NewContent
-                                                        :> DELETE
-             :<|> "content" :> Capture "contentId" UUID :> "fields" :> ReqBody '[JSON] NewContent
-                                                                    :> PATCH
--}
 
 startServer :: Port -> DatabaseActions conn -> IO ()
 startServer p da = run p (serve contentAPIProxy $ server da)
@@ -76,7 +72,7 @@ putContentHandler :: UUID -> NewContent -> StoreHandler conn Content
 putContentHandler cId new@(NewContent newT newFs) = do
     existing <- query getContent contentQuery{ whereId = Just cId }
     case existing of
-        []       -> insertNewPost (Just cId) new
+        []      -> insertNewPost (Just cId) new
         (_:_:_) -> throwStoreError err500
         [Content { contentType = oldT, fields = oldFs }] ->
             do when (oldT /= newT) $ throwStoreError err400 { errBody = B.concat [
@@ -90,7 +86,7 @@ putContentHandler cId new@(NewContent newT newFs) = do
                     Right [] -> pure ()
                     Right cs -> liftIO getCurrentTime >>= \time ->
                               query insertFields (cId, time, cs)
-               getContentHandler cId
+               getContentHandler cId Nothing
 
 
 postContentHandler :: NewContent -> StoreHandler conn Content
@@ -103,12 +99,13 @@ getAllContentHandler limit continue cType time = query getContent params where
                            whereType=cType,
                            whereTime=time }
 
-getContentHandler :: UUID -> StoreHandler conn Content
-getContentHandler cId = do content <- query getContent contentQuery{ whereId = Just cId }
-                           case content of
-                               []  -> throwStoreError err404
-                               [c] -> pure c
-                               _   -> throwStoreError err500
+getContentHandler :: UUID -> Maybe UTCTime -> StoreHandler conn Content
+getContentHandler cId time =
+    do content <- query getContent contentQuery{ whereId = Just cId, whereTime = time }
+       case content of
+           []  -> throwStoreError err404
+           [c] -> pure c
+           _   -> throwStoreError err500
 
 insertNewPost :: Maybe UUID -> NewContent -> StoreHandler conn Content
 insertNewPost mId (NewContent cType fs) = do
@@ -120,7 +117,7 @@ insertNewPost mId (NewContent cType fs) = do
     case fromJSON fs of
         Left err  -> throwStoreError $ err400 { errBody = err }
         Right kvp -> query insertFields (cId, time, kvp)
-    getContentHandler cId
+    getContentHandler cId Nothing
 
 -- | Pass a DatabaseActions getter and a request object and run the request in the StoreHandler Monad
 query :: (DatabaseActions conn -> conn -> req -> IO res) -> req -> StoreHandler conn res

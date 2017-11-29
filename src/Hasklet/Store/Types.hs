@@ -13,7 +13,8 @@ import           Data.Time.Clock
 import           Data.UUID
 import           Servant.Server
 
-data FieldValue = NullField
+data FieldValue = NoField
+                | NullField
                 | NumberField Double
                 | TextField T.Text
                 | BoolField Bool deriving(Eq)
