@@ -19,9 +19,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Trans
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Reader
-import qualified Data.ByteString.Lazy       as B
 import qualified Data.Text                  as T
-import           Data.Text.Encoding
 import           Data.Time.Clock
 import           Data.UUID
 import           Data.UUID.V4
@@ -39,6 +37,7 @@ type ContentAPI = "content" :> ReqBody '[JSON] NewContent
              :<|> "content" :> QueryParam "limit" Int
                             :> QueryParam "continue" UUID
                             :> QueryParam "type" T.Text
+                            :> QueryParam "active" Bool
                             :> QueryParam "time" UTCTime
                             :> Get '[JSON] [Content]
 
@@ -69,33 +68,31 @@ runStoreHandler da s = Handler $ ExceptT (transactionalHandler `catch` (pure . L
             Right r -> pure (Right r)
 
 putContentHandler :: UUID -> NewContent -> StoreHandler conn Content
-putContentHandler cId new@(NewContent newT newFs) = do
+putContentHandler cId new@(NewContent newT newA newFs) = do
     existing <- query getContent contentQuery{ whereId = Just cId }
     case existing of
         []      -> insertNewPost (Just cId) new
         (_:_:_) -> throwStoreError err500
-        [Content { contentType = oldT, fields = oldFs }] ->
-            do when (oldT /= newT) $ throwStoreError err400 { errBody = B.concat [
-                   "Cannot change content type. Server content type is '",
-                   B.fromStrict $ encodeUtf8 oldT,
-                   "' but attempting to put a content type of '",
-                   B.fromStrict $ encodeUtf8 newT,
-                   "'" ]}
-               case fieldChanges oldFs newFs of
-                    Left err -> throwStoreError $ err400 { errBody = err }
-                    Right [] -> pure ()
-                    Right cs -> liftIO getCurrentTime >>= \time ->
-                              query insertFields (cId, time, cs)
+        [Content { contentType = oldT, active = oldA, fields = oldFs }] -> do
+               time <- liftIO getCurrentTime
+               fChanged <- case fieldChanges oldFs newFs of
+                             Left err -> throwStoreError $ err400 { errBody = err }
+                             Right [] -> pure False
+                             Right cs -> query insertFields (cId, time, cs) *> pure True
+               let propChanged = oldT /= newT || oldA /= newA
+               when propChanged $ query insertProperties (cId, time, newT, newA)
+               when (propChanged || fChanged) $ query updateLastModified (cId, time)
                getContentHandler cId Nothing
 
 
 postContentHandler :: NewContent -> StoreHandler conn Content
 postContentHandler = insertNewPost Nothing
 
-getAllContentHandler :: Maybe Int -> Maybe UUID -> Maybe T.Text -> Maybe UTCTime -> StoreHandler conn [Content]
-getAllContentHandler limit continue cType time = query getContent params where
+getAllContentHandler :: Maybe Int -> Maybe UUID -> Maybe T.Text -> Maybe Bool -> Maybe UTCTime -> StoreHandler conn [Content]
+getAllContentHandler limit continue cType act time = query getContent params where
     params = contentQuery{ whereLimit=limit,
                            whereContinueId=continue,
+                           whereActive=act,
                            whereType=cType,
                            whereTime=time }
 
@@ -108,12 +105,13 @@ getContentHandler cId time =
            _   -> throwStoreError err500
 
 insertNewPost :: Maybe UUID -> NewContent -> StoreHandler conn Content
-insertNewPost mId (NewContent cType fs) = do
+insertNewPost mId (NewContent cType act fs) = do
     cId <- case mId of
             Nothing  -> liftIO nextRandom
             Just cId -> pure cId
     time <- liftIO getCurrentTime
-    query insertContent (cId, cType, time)
+    query insertContent (cId, time)
+    query insertProperties (cId, time, cType, act)
     case fromJSON fs of
         Left err  -> throwStoreError $ err400 { errBody = err }
         Right kvp -> query insertFields (cId, time, kvp)

@@ -22,6 +22,7 @@ data FieldValue = NoField
 data Content = Content {
     id               :: UUID,
     contentType      :: T.Text,
+    active           :: Bool,
     lastModifiedTime :: UTCTime,
     createdTime      :: UTCTime,
     fields           :: Value
@@ -30,6 +31,7 @@ $(deriveJSON defaultOptions ''Content)
 
 data NewContent = NewContent {
     contentType :: T.Text,
+    active      :: Bool,
     fields      :: Value
 }
 $(deriveJSON defaultOptions ''NewContent)
@@ -44,18 +46,20 @@ type StoreHandler conn = ReaderT (HandlerContext conn) (ExceptT ServantErr IO)
 data ContentQuery = ContentQuery {
     whereId         :: Maybe UUID,
     whereType       :: Maybe T.Text,
+    whereActive     :: Maybe Bool,
     whereContinueId :: Maybe UUID,
     whereTime       :: Maybe UTCTime,
     whereLimit      :: Maybe Int
 }
 
 contentQuery :: ContentQuery
-contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing
+contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing Nothing
 
 data DatabaseActions conn = DatabaseActions {
-    withTransaction :: forall a. (conn -> IO a) -> IO a,
-    insertContent   :: conn -> (UUID, T.Text, UTCTime) -> IO (),
-    updateContent   :: conn -> (UUID, T.Text, UTCTime) -> IO (),
-    insertFields    :: conn -> (UUID, UTCTime, [(T.Text, FieldValue)]) -> IO (),
-    getContent      :: conn -> ContentQuery -> IO [Content]
+    withTransaction  :: forall a. (conn -> IO a) -> IO a,
+    insertContent    :: conn -> (UUID, UTCTime) -> IO (),
+    insertFields     :: conn -> (UUID, UTCTime, [(T.Text, FieldValue)]) -> IO (),
+    insertProperties :: conn -> (UUID, UTCTime, T.Text, Bool) -> IO (),
+    updateLastModified    :: conn -> (UUID, UTCTime) -> IO (),
+    getContent       :: conn -> ContentQuery -> IO [Content]
 }
