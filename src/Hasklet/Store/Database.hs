@@ -70,9 +70,9 @@ instance FromRow QueryRow where
 queryRowId :: QueryRow -> PersistUUID
 queryRowId (QueryRow _id _ _ _ _ _ _ _) = _id
 
-createDatabaseActions :: String -> IO (DatabaseActions Connection)
-createDatabaseActions f = do
-    pool <- createPool (open f) close 1 10 10
+createDatabaseActions :: String -> Int -> IO (DatabaseActions Connection)
+createDatabaseActions f maxConns = do
+    pool <- createPool (open f) close 1 60 maxConns
     pure $ DatabaseActions (withPooledTransaction pool)
         insertContent'
         insertFields'

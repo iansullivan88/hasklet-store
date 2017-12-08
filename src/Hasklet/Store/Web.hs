@@ -7,7 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeOperators         #-}
 
-module Hasklet.Store.Web(startServer) where
+module Hasklet.Store.Web(application) where
 
 import           Hasklet.Store.Transform
 import           Hasklet.Store.Types
@@ -23,7 +23,6 @@ import qualified Data.Text                  as T
 import           Data.Time.Clock
 import           Data.UUID
 import           Data.UUID.V4
-import           Network.Wai.Handler.Warp
 import           Servant                    hiding (contentType)
 
 type ContentAPI = "content" :> ReqBody '[JSON] NewContent
@@ -41,8 +40,8 @@ type ContentAPI = "content" :> ReqBody '[JSON] NewContent
                             :> QueryParam "time" UTCTime
                             :> Get '[JSON] [Content]
 
-startServer :: Port -> DatabaseActions conn -> IO ()
-startServer p da = run p (serve contentAPIProxy $ server da)
+application :: DatabaseActions conn -> Application
+application da = serve contentAPIProxy $ server da
 
 contentAPIProxy :: Proxy ContentAPI
 contentAPIProxy = Proxy

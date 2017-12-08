@@ -26,14 +26,14 @@ data Content = Content {
     lastModifiedTime :: UTCTime,
     createdTime      :: UTCTime,
     fields           :: Value
-}
+} deriving(Show)
 $(deriveJSON defaultOptions ''Content)
 
 data NewContent = NewContent {
     contentType :: T.Text,
     active      :: Bool,
     fields      :: Value
-}
+} deriving(Show)
 $(deriveJSON defaultOptions ''NewContent)
 
 data HandlerContext conn = HandlerContext {

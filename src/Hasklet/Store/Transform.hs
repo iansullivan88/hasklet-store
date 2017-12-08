@@ -18,7 +18,7 @@ import qualified Data.Text            as T
 fromJSON :: Value -> Either B.ByteString [(T.Text, FieldValue)]
 fromJSON = go [] where
     go ks (Object o) = do vs <- traverse (\(k,v) -> case T.find ('.' ==) k of
-                                                Nothing -> go (k:ks) v
+                                                Nothing -> go (ks ++ [k]) v
                                                 Just _  -> Left "JSON keys cannot contain '.'") $ Map.toList o
                           pure $ concat vs
     go _ (Array _)  = Left "Cannot store JSON arrays"
@@ -37,7 +37,7 @@ fromKeyValuePairs fs = let fsWithValue = filter (\(_,v) -> v /= NoField) fs
         | any (null . fst) kvps = Nothing -- This key has a value and sub-keys - this is not valid JSON
         | otherwise = (Object . Map.fromList) <$> traverse fromGroup (groupByKey (head . fst) kvps)
     fromGroup (k, kvps) = (k,) <$> go (mapFst tail kvps)
-    fromFieldValue NoField = error "This cannot happen. The NoField values are filtered out."
+    fromFieldValue NoField = error "This cannot happen. The NoField values are filtered above."
     fromFieldValue NullField       = Null
     fromFieldValue (NumberField d) = Number $ fromFloatDigits d
     fromFieldValue (TextField t)   = String t
