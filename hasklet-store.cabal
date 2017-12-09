@@ -45,6 +45,7 @@ executable hasklet-store
                      , directory
                      , filepath
                      , warp
+                     , optparse-applicative
   default-language:    Haskell2010
 
 test-suite hasklet-store-test
