@@ -11,6 +11,7 @@ import           Control.Monad
 import           Data.Aeson
 import qualified Data.ByteString           as B
 import qualified Data.ByteString.Lazy      as LB
+import           Data.List
 import           Data.Text.Encoding
 import           Data.Time.Clock
 import           Data.UUID
@@ -40,7 +41,27 @@ main = hspec $ with setupApp $ do
             putJSON ("/content/" `B.append` toASCIIBytes _id) (encode newContent2) `shouldRespondWith` 200
             void $ postContent newContent2
             get ("/content?time=" `B.append` byteStringQueryParam time) `jsonResponse` (`shouldSatisfy` matchesAllNewContent [newContent1])
-
+        it "can filter by type" $ do
+            void $ postContent newContent1
+            void $ postContent newContent2
+            void $ postContent newContent2
+            get "/content?type=type2" `jsonResponse` (`shouldSatisfy` matchesAllNewContent [newContent2, newContent2])
+        it "can filter by state" $ do
+            void $ postContent newContent2
+            void $ postContent newContent1
+            void $ postContent newContent2
+            get "/content?active=false" `jsonResponse` (`shouldSatisfy` matchesAllNewContent [newContent2, newContent2])
+        it "can limit response" $ do
+            void $ postContent newContent1
+            void $ postContent newContent1
+            void $ postContent newContent1
+            get "/content?limit=2" `jsonResponse` (`shouldSatisfy` matchesAllNewContent [newContent1,newContent1])
+        it "can continue from id" $ do
+            Content {id = id1} <- postContent newContent1
+            Content {id = id2} <- postContent newContent1
+            Content {id = id3} <- postContent newContent1
+            let (firstId:remainingIds) = sort [id1, id2, id3]
+            get ("/content?continue=" `B.append` toASCIIBytes firstId) `jsonResponse` (`shouldSatisfy` \cs -> fmap Hasklet.Store.Types.id cs == remainingIds)
     describe "GET /content/:id" $
         it "retrieves content" $ do
             Content {id = id1} <- postContent newContent1
@@ -52,6 +73,8 @@ main = hspec $ with setupApp $ do
             postJSON "/content" (encode newContent1) `jsonResponse` (`shouldSatisfy` matchesNewContent newContent1)
         it "doesn't allow JSON arrays" $
             postJSON "/content" (encode $ NewContent "type1" True (Array V.empty)) `shouldRespondWith` 400
+        it "doesn't allow full-stops in field names" $
+            postJSON "/content" (encode $ NewContent "type1" True (object ["foo.bar" .= Null])) `shouldRespondWith` 400
     describe "PUT /content/:id" $ do
         it "replaces content" $ do
             Content {id = _id} <- postContent newContent1
