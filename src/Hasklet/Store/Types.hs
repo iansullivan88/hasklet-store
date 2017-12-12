@@ -52,9 +52,6 @@ data ContentQuery = ContentQuery {
     whereLimit      :: Maybe Int
 }
 
-contentQuery :: ContentQuery
-contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing Nothing
-
 data DatabaseActions conn = DatabaseActions {
     withTransaction     :: forall a. (conn -> IO a) -> IO a,
     insertContent       :: conn -> (UUID, UTCTime) -> IO (),
@@ -64,3 +61,7 @@ data DatabaseActions conn = DatabaseActions {
     getContent          :: conn -> ContentQuery -> IO [Content],
     getVersions         :: conn -> UUID -> IO [UTCTime]
 }
+
+-- | Default 'ContentQuery'
+contentQuery :: ContentQuery
+contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing Nothing

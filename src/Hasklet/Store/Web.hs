@@ -59,6 +59,7 @@ server da = enter (handlerTransform da) (
 handlerTransform :: DatabaseActions conn -> StoreHandler conn :~> Handler
 handlerTransform da = NT $ runStoreHandler da
 
+-- | Turn a 'StoreHandler' into a regular 'Handler' using the specified 'DatabaseActions'
 runStoreHandler :: DatabaseActions conn -> StoreHandler conn a -> Handler a
 runStoreHandler da s = Handler $ ExceptT (transactionalHandler `catch` (pure . Left)) where
     transactionalHandler = withTransaction da $ \conn -> do
@@ -69,6 +70,7 @@ runStoreHandler da s = Handler $ ExceptT (transactionalHandler `catch` (pure . L
             Left e  -> throwIO e -- throw error here to abort transaction
             Right r -> pure (Right r)
 
+-- | Update existing content
 putContentHandler :: UUID -> NewContent -> StoreHandler conn Content
 putContentHandler cId new@(NewContent newT newA newFs) = do
     existing <- query getContent contentQuery{ whereId = Just cId }
@@ -86,10 +88,11 @@ putContentHandler cId new@(NewContent newT newA newFs) = do
                when (propChanged || fChanged) $ query updateLastModified (cId, time)
                getContentHandler cId Nothing
 
-
+-- | Post new content
 postContentHandler :: NewContent -> StoreHandler conn Content
 postContentHandler = insertNewPost Nothing
 
+-- | Get all content using the specified query parameters
 getAllContentHandler :: Maybe Int -> Maybe UUID -> Maybe T.Text -> Maybe Bool -> Maybe UTCTime -> StoreHandler conn [Content]
 getAllContentHandler limit continue cType act time = query getContent params where
     params = contentQuery{ whereLimit=limit,
@@ -98,6 +101,7 @@ getAllContentHandler limit continue cType act time = query getContent params whe
                            whereType=cType,
                            whereTime=time }
 
+-- | Get a single content
 getContentHandler :: UUID -> Maybe UTCTime -> StoreHandler conn Content
 getContentHandler cId time =
     do content <- query getContent contentQuery{ whereId = Just cId, whereTime = time }
@@ -106,8 +110,15 @@ getContentHandler cId time =
            [c] -> pure c
            _   -> throwStoreError err500
 
+-- | Get all versions for the the specified content id
 getVersionsHandler :: UUID -> StoreHandler conn [UTCTime]
 getVersionsHandler cId = getContentHandler cId Nothing *> query getVersions cId
+
+-- | Pass a DatabaseActions getter and a request object and run the request in the StoreHandler Monad
+query :: (DatabaseActions conn -> conn -> req -> IO res) -> req -> StoreHandler conn res
+query getAction req = do (HandlerContext conn as) <- ask
+                         let dbAction = getAction as
+                         liftIO $ dbAction conn req
 
 insertNewPost :: Maybe UUID -> NewContent -> StoreHandler conn Content
 insertNewPost mId (NewContent cType act fs) = do
@@ -121,12 +132,6 @@ insertNewPost mId (NewContent cType act fs) = do
         Left err  -> throwStoreError $ err400 { errBody = err }
         Right kvp -> query insertFields (cId, time, kvp)
     getContentHandler cId Nothing
-
--- | Pass a DatabaseActions getter and a request object and run the request in the StoreHandler Monad
-query :: (DatabaseActions conn -> conn -> req -> IO res) -> req -> StoreHandler conn res
-query getAction req = do (HandlerContext conn as) <- ask
-                         let dbAction = getAction as
-                         liftIO $ dbAction conn req
 
 throwStoreError :: ServantErr -> StoreHandler conn a
 throwStoreError = lift . throwError

@@ -14,7 +14,10 @@ import           Data.List
 import           Data.Scientific
 import qualified Data.Text            as T
 
-
+-- | Transform JSON into a list of key-value pairs.
+-- Take nesting into account eg {"foo":{"bar":1,"buzz":2}}
+-- should be transformed into [("foo.bar",1),("foo.buzz",2)].
+-- Key names cannot contain a '.'.
 fromJSON :: Value -> Either B.ByteString [(T.Text, FieldValue)]
 fromJSON = go [] where
     go ks (Object o) = do vs <- traverse (\(k,v) -> case T.find ('.' ==) k of
@@ -28,6 +31,9 @@ fromJSON = go [] where
     go ks Null       = Right [(getKey ks, NullField)]
     getKey = T.intercalate "."
 
+-- | Transform a list of key-value pairs into JSON.
+-- Take nesting into account eg [("foo.bar",1),("foo.buzz",2)] should
+-- be transformed into {"foo":{"bar":1,"buzz":2}}.
 fromKeyValuePairs :: [(T.Text, FieldValue)] -> Maybe Value
 fromKeyValuePairs fs = let fsWithValue = filter (\(_,v) -> v /= NoField) fs
                            fsSplit = mapFst (\k -> if T.null k then [] else T.splitOn "." k) fsWithValue
@@ -43,6 +49,8 @@ fromKeyValuePairs fs = let fsWithValue = filter (\(_,v) -> v /= NoField) fs
     fromFieldValue (TextField t)   = String t
     fromFieldValue (BoolField b)   = Bool b
 
+-- | Given an initial JSON value and a new JSON value, get a list
+-- of updated key-value pairs.
 fieldChanges :: Value -> Value -> Either B.ByteString [(T.Text, FieldValue)]
 fieldChanges v v' = do
     fs  <- fromJSON v

@@ -21,6 +21,7 @@ import           Database.SQLite.Simple.FromField
 import           Database.SQLite.Simple.ToField
 import           Database.SQLite.Simple.Types
 
+-- | A wrapper around a 'UUID' with custom 'FromField' and 'ToField' instances
 newtype PersistUUID = PersistUUID UUID deriving(Eq)
 
 instance ToField PersistUUID where
@@ -30,6 +31,7 @@ instance FromField PersistUUID where
     fromField f = do bs <- fromField f
                      maybe (returnError ConversionFailed f "Could not parse UUID") (pure . PersistUUID) (fromText bs)
 
+-- | A wrapper around a 'FieldValue' with custom 'FromField' and 'ToField' instances
 newtype PersistFieldValue = PersistFieldValue FieldValue
 
 instance ToField PersistFieldValue where
@@ -48,7 +50,17 @@ instance FromField PersistFieldValue where
         (SQLBlob _) -> returnError ConversionFailed f "Field values cannot be blobs"
         SQLNull -> pure $ PersistFieldValue NullField
 
-data ValueTransform = IdentityTransform | BoolTransform | NoFieldTransform
+-- | Sqlite can only store a few types natively. 'ValueTransform' represents a transform
+-- from a JSON value type that is supported to one that isn't.
+data ValueTransform
+    -- | No transform required
+    = IdentityTransform
+    -- | Transform to and from a bool
+    | BoolTransform
+    -- | This is the difference between 'NULL' and 'no field'.
+    -- Both are stored as NULL in Sqlite. No field is the value
+    -- of a field that has been removed.
+    | NoFieldTransform
 
 instance ToField ValueTransform where
     toField IdentityTransform = SQLNull
@@ -83,7 +95,6 @@ createDatabaseActions f maxConns = do
 
 withPooledTransaction :: Pool Connection -> (Connection -> IO a) -> IO a
 withPooledTransaction p a = withResource p (\conn -> Database.SQLite.Simple.withTransaction conn (a conn))
-
 
 createSchema :: Connection -> IO ()
 createSchema conn = do
@@ -170,6 +181,9 @@ getContent' c (ContentQuery _id _type act cont time limit) = groupRows <$> query
 \ORDER BY content.id"
 
 
+-- | The large content query returns a row for each field value.
+-- This function groups adjacent rows by Id and returns a list
+-- of content.
 groupRows :: [QueryRow] -> [Content]
 groupRows = map mapGroup . groupBy ((==) `on` queryRowId) where
     mapGroup rs = let (QueryRow (PersistUUID _id) cType act modified created _ _ _) = head rs
