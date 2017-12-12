@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 import           Hasklet.Store.Database
 import           Hasklet.Store.Types
@@ -91,7 +92,21 @@ main = hspec $ with setupApp $ do
             wait
             putJSON ("/content/" `B.append` toASCIIBytes _id) (encode newContent1) `shouldRespondWith` 200
             get ("/content/" `B.append` toASCIIBytes _id) `jsonResponse` (`shouldSatisfy`
-                \Content { id = _id', lastModifiedTime = lmt', createdTime = ct' } -> _id == _id' && lmt' == lmt && ct == ct') where
+                \Content { id = _id', lastModifiedTime = lmt', createdTime = ct' } -> _id == _id' && lmt' == lmt && ct == ct')
+    describe "GET /content/:id/versions" $ do
+        it "returns 404 if the id doesn't exist" $
+            get "/content/f5584d06-a816-4c26-99d2-12781b6ecbfa/versions" `shouldRespondWith` 404
+        it "returns single version" $ do
+            Content {id = _id, lastModifiedTime = lmt} <- postContent newContent1
+            get ("/content/" `B.append` toASCIIBytes _id `B.append` "/versions") `jsonResponse` (`shouldBe` [lmt])
+        it "returns a version for changed properties and fields" $ do
+            Content {id = _id} <- postContent newContent1
+            wait
+            putJSON ("/content/" `B.append` toASCIIBytes _id) (encode (newContent1 {contentType="changed"} :: NewContent)) `shouldRespondWith` 200
+            wait
+            putJSON ("/content/" `B.append` toASCIIBytes _id) (encode (newContent1 {fields=Null} :: NewContent)) `shouldRespondWith` 200
+            get ("/content/" `B.append` toASCIIBytes _id `B.append` "/versions") `jsonResponse` (`shouldSatisfy` \(vs :: [UTCTime]) -> length vs == 3)
+        where
     wait = liftIO $ threadDelay 100000
     byteStringQueryParam = encodeUtf8 . toQueryParam
 

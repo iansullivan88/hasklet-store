@@ -39,6 +39,8 @@ type ContentAPI = "content" :> ReqBody '[JSON] NewContent
                             :> QueryParam "active" Bool
                             :> QueryParam "time" UTCTime
                             :> Get '[JSON] [Content]
+             :<|> "content" :> Capture "contentId" UUID :> "versions"
+                                                        :> Get '[JSON] [UTCTime]
 
 application :: DatabaseActions conn -> Application
 application da = serve contentAPIProxy $ server da
@@ -51,7 +53,8 @@ server da = enter (handlerTransform da) (
     postContentHandler :<|>
     putContentHandler :<|>
     getContentHandler :<|>
-    getAllContentHandler)
+    getAllContentHandler :<|>
+    getVersionsHandler)
 
 handlerTransform :: DatabaseActions conn -> StoreHandler conn :~> Handler
 handlerTransform da = NT $ runStoreHandler da
@@ -102,6 +105,9 @@ getContentHandler cId time =
            []  -> throwStoreError err404
            [c] -> pure c
            _   -> throwStoreError err500
+
+getVersionsHandler :: UUID -> StoreHandler conn [UTCTime]
+getVersionsHandler cId = getContentHandler cId Nothing *> query getVersions cId
 
 insertNewPost :: Maybe UUID -> NewContent -> StoreHandler conn Content
 insertNewPost mId (NewContent cType act fs) = do

@@ -79,6 +79,7 @@ createDatabaseActions f maxConns = do
         insertProperties'
         updateLastModified'
         getContent'
+        getVersions'
 
 withPooledTransaction :: Pool Connection -> (Connection -> IO a) -> IO a
 withPooledTransaction p a = withResource p (\conn -> Database.SQLite.Simple.withTransaction conn (a conn))
@@ -126,6 +127,13 @@ insertFields' c (cId, time, kvps) = executeMany c sql parameters
     where sql = "INSERT INTO field VALUES (?,?,?,?,?)"
           cId' = PersistUUID cId
           parameters = map (\(k, v) -> (cId', time, k, getTransform v, PersistFieldValue v)) kvps
+
+getVersions' :: Connection -> UUID -> IO [UTCTime]
+getVersions' c cId = concat <$> queryNamed c sql [":id" := PersistUUID cId]
+    where sql = "SELECT version_date FROM field WHERE content_id = :id \
+                \UNION \
+                \SELECT version_date FROM properties WHERE content_id = :id \
+                \ORDER BY version_date"
 
 getContent' :: Connection -> ContentQuery -> IO [Content]
 getContent' c (ContentQuery _id _type act cont time limit) = groupRows <$> queryNamed c sql parameters  where

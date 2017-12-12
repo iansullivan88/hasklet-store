@@ -56,10 +56,11 @@ contentQuery :: ContentQuery
 contentQuery = ContentQuery Nothing Nothing Nothing Nothing Nothing Nothing
 
 data DatabaseActions conn = DatabaseActions {
-    withTransaction  :: forall a. (conn -> IO a) -> IO a,
-    insertContent    :: conn -> (UUID, UTCTime) -> IO (),
-    insertFields     :: conn -> (UUID, UTCTime, [(T.Text, FieldValue)]) -> IO (),
-    insertProperties :: conn -> (UUID, UTCTime, T.Text, Bool) -> IO (),
-    updateLastModified    :: conn -> (UUID, UTCTime) -> IO (),
-    getContent       :: conn -> ContentQuery -> IO [Content]
+    withTransaction     :: forall a. (conn -> IO a) -> IO a,
+    insertContent       :: conn -> (UUID, UTCTime) -> IO (),
+    insertFields        :: conn -> (UUID, UTCTime, [(T.Text, FieldValue)]) -> IO (),
+    insertProperties    :: conn -> (UUID, UTCTime, T.Text, Bool) -> IO (),
+    updateLastModified  :: conn -> (UUID, UTCTime) -> IO (),
+    getContent          :: conn -> ContentQuery -> IO [Content],
+    getVersions         :: conn -> UUID -> IO [UTCTime]
 }
