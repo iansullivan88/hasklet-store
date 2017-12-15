@@ -23,9 +23,13 @@ Stored content items have the following form:
     }
 
 `UUID` is a string in the following format: `423791df-9dec-4645-a41e-2bc3d7fffbe9`
+
 `contentType` is an arbitrary string.
+
 `active` specifies if an item has been deleted or not
+
 `fields` is _almost_ arbitrary JSON. To simplify the persistence of fields, JSON arrays are not allowed and the '.' character is not allowed in key names.
+
 `DateTime`s are strings in the following format: `YYYY-MM-DDTHH:MM:SS.SSSZ`
 
 ### POST /content
@@ -40,9 +44,13 @@ This updates or creates the item with an id that matches `:id`. This is idempote
 Lists all content
 #### Query Parameters
 `type` only return content matching this content type
+
 `active` only return content in the specified state
+
 `time` return content as it was at the time specified
+
 `contentId` only return content with ids after the specified id
+
 `limit` only return at most, this many content items
 
 ### GET /content/:id
